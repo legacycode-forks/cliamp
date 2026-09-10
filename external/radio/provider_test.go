@@ -220,6 +220,35 @@ func TestProviderToggleFavoriteLocalRejected(t *testing.T) {
 	}
 }
 
+func TestProviderToggleFavoriteTrackFromLoadedCatalogPlaylist(t *testing.T) {
+	p := newTestProvider(t)
+	station := CatalogStation{
+		Name: "Deep House Radio", URL: "https://radio.example/deep-house",
+		Country: "Germany", Tags: "deep house", Codec: "MP3", Bitrate: 128,
+	}
+	p.AppendCatalog([]CatalogStation{station})
+	tracks, err := p.Tracks("c:0")
+	if err != nil {
+		t.Fatalf("Tracks: %v", err)
+	}
+
+	added, name, err := p.ToggleFavoriteTrack(tracks[0])
+	if err != nil || !added || name != station.Name {
+		t.Fatalf("ToggleFavoriteTrack = (%v, %q, %v), want (true, %q, nil)", added, name, err, station.Name)
+	}
+	if got := len(p.favorites.Stations()); got != 1 {
+		t.Fatalf("favorite station count = %d, want 1", got)
+	}
+
+	added, _, err = p.ToggleFavoriteTrack(tracks[0])
+	if err != nil || added {
+		t.Fatalf("second ToggleFavoriteTrack = (%v, %v), want (false, nil)", added, err)
+	}
+	if got := len(p.favorites.Stations()); got != 0 {
+		t.Fatalf("favorite station count after removal = %d, want 0", got)
+	}
+}
+
 func TestProviderToggleFavoriteInvalidIdx(t *testing.T) {
 	p := newTestProvider(t)
 	_, _, err := p.ToggleFavorite("c:99")

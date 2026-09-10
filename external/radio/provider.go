@@ -368,6 +368,39 @@ func (p *Provider) ToggleFavorite(id string) (added bool, name string, err error
 		return false, "", errors.New("cannot favorite local stations")
 	}
 
+	return p.toggleFavoriteStationLocked(s)
+}
+
+// ToggleFavoriteTrack toggles a radio station loaded through a genre, country,
+// or search result. Such tracks no longer have their provider list ID, so the
+// stream URL is the stable identity used by the radio favorites store.
+func (p *Provider) ToggleFavoriteTrack(track playlist.Track) (bool, string, error) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+
+	station := CatalogStation{
+		Name: track.Title,
+		URL:  track.Path,
+		Tags: track.Genre,
+	}
+	if track.ProviderMeta != nil {
+		station.Country = track.ProviderMeta["radio.country"]
+		station.State = track.ProviderMeta["radio.state"]
+		station.Codec = track.ProviderMeta["radio.codec"]
+		if bitrate := track.ProviderMeta["radio.bitrate"]; bitrate != "" {
+			station.Bitrate, _ = strconv.Atoi(bitrate)
+		}
+	}
+	if station.Name == "" {
+		station.Name = station.URL
+	}
+	if station.URL == "" {
+		return false, station.Name, errors.New("cannot favorite radio station without URL")
+	}
+	return p.toggleFavoriteStationLocked(station)
+}
+
+func (p *Provider) toggleFavoriteStationLocked(s CatalogStation) (bool, string, error) {
 	if p.favorites.Contains(s.URL) {
 		return false, s.Name, p.favorites.Remove(s.URL)
 	}

@@ -335,3 +335,11 @@ type FavoritesManager interface {
 	// FavoritesCount returns the number of favorited tracks.
 	FavoritesCount() int
 }
+
+// TrackFavoriteToggler is implemented by providers whose track rows represent
+// provider-level favorites rather than local playlist bookmarks.
+type TrackFavoriteToggler interface {
+	// ToggleFavoriteTrack toggles the provider favorite for a loaded track.
+	// Returns true when the track is now favorited after the call.
+	ToggleFavoriteTrack(track playlist.Track) (bool, string, error)
+}

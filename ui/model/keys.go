@@ -664,22 +664,41 @@ func (m *Model) handleKey(msg tea.KeyPressMsg) tea.Cmd {
 		return m.doSeek(m.seekStepLarge)
 
 	case "f":
-		if m.focus == focusPlaylist && m.plCursor >= 0 && m.plCursor < m.playlist.Len() && m.loadedPlaylist != "" {
-			if bs, ok := m.localProvider.(provider.BookmarkSetter); ok {
-				track, ok := m.playlist.Track(m.plCursor)
-				if !ok {
+		if m.focus == focusPlaylist && m.plCursor >= 0 && m.plCursor < m.playlist.Len() {
+			track, exists := m.playlist.Track(m.plCursor)
+			if !exists {
+				return nil
+			}
+			if tf, ok := m.provider.(provider.TrackFavoriteToggler); ok {
+				added, name, err := tf.ToggleFavoriteTrack(track)
+				if err != nil {
+					m.status.Errorf(statusTTLDefault, "Favorite save failed: %s", err)
 					return nil
 				}
-				if err := bs.SetBookmarkByPath(m.loadedPlaylist, track.Path); err != nil {
-					m.status.Errorf(statusTTLDefault, "Save failed: %s", err)
-					return nil
-				}
-				m.playlist.ToggleBookmark(m.plCursor)
-				track, _ = m.playlist.Track(m.plCursor)
-				if track.Bookmark {
-					m.status.Showf(statusTTLDefault, "★ %s", track.DisplayName())
+				if added {
+					m.status.Showf(statusTTLDefault, "★ %s", name)
 				} else {
-					m.status.Showf(statusTTLDefault, "☆ %s", track.DisplayName())
+					m.status.Showf(statusTTLDefault, "☆ %s", name)
+				}
+				return m.fetchProviderPlaylists()
+			}
+			if m.loadedPlaylist != "" {
+				if bs, ok := m.localProvider.(provider.BookmarkSetter); ok {
+					track, ok := m.playlist.Track(m.plCursor)
+					if !ok {
+						return nil
+					}
+					if err := bs.SetBookmarkByPath(m.loadedPlaylist, track.Path); err != nil {
+						m.status.Errorf(statusTTLDefault, "Save failed: %s", err)
+						return nil
+					}
+					m.playlist.ToggleBookmark(m.plCursor)
+					track, _ = m.playlist.Track(m.plCursor)
+					if track.Bookmark {
+						m.status.Showf(statusTTLDefault, "★ %s", track.DisplayName())
+					} else {
+						m.status.Showf(statusTTLDefault, "☆ %s", track.DisplayName())
+					}
 				}
 			}
 		}

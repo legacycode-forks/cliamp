@@ -96,7 +96,7 @@ and `Esc` clears it.
 
 | Key | Action |
 |---|---|
-| `f` | Toggle bookmark ★ on the selected track. In the radio browser, favorite the selected station. In the country browser, pin the selected country or region. On a podcast show, subscribe or unsubscribe. |
+| `f` | Toggle bookmark ★ on the selected track. In the radio provider or a loaded radio result, favorite the selected station. In the country browser, pin the selected country or region. On a podcast show, subscribe or unsubscribe. |
 | `n` | Toggle favorite ♥ on the selected track. Favorited tracks appear in the cross-playlist "Favorites" virtual playlist. |
 | `Ctrl+F` | Search with the active provider (Podcasts, Spotify, Qobuz, Tidal, Navidrome, Lyrion, Jellyfin, Emby, Plex, Audiobookshelf, Mixcloud, NetEase, Local), or search YouTube. Available in playlist and provider-browser views. |
 | `u` | Load URL (stream/playlist) |

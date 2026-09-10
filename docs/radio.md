@@ -189,7 +189,7 @@ Unlike directory entries, these are not filtered to `http` and `https`. That fil
 | --- | --- |
 | `R` | Open the radio provider |
 | `/` | Search station names through the directory (Enter runs it, Esc clears) |
-| `f` | Favorite the selected station, or pin the selected country |
+| `f` | Favorite the selected station in the radio provider or a loaded radio result, or pin the selected country |
 | `N` | Open the country browser |
 | `Ctrl+R` | Refresh: re-fetch the country list and the catalog |
 
