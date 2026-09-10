@@ -379,7 +379,7 @@ func (p *Provider) ToggleFavoriteTrack(track playlist.Track) (bool, string, erro
 	defer p.mu.Unlock()
 
 	station := CatalogStation{
-		Name: track.Title,
+		Name: track.Meta("radio.name"),
 		URL:  track.Path,
 		Tags: track.Genre,
 	}
@@ -390,6 +390,9 @@ func (p *Provider) ToggleFavoriteTrack(track playlist.Track) (bool, string, erro
 		if bitrate := track.ProviderMeta["radio.bitrate"]; bitrate != "" {
 			station.Bitrate, _ = strconv.Atoi(bitrate)
 		}
+	}
+	if station.Name == "" {
+		station.Name = track.Title
 	}
 	if station.Name == "" {
 		station.Name = station.URL

@@ -314,7 +314,7 @@ func TestGenreTracksQueriesOnePlace(t *testing.T) {
 	}
 	want := playlist.Track{
 		Path: "https://nrk.example/p3", Title: "NRK P3 [192k] · Norway", Genre: "pop,rock", Stream: true, Realtime: true,
-		ProviderMeta: map[string]string{"radio.country": "Norway", "radio.codec": "MP3", "radio.bitrate": "192", "radio.state": "Oslo"},
+		ProviderMeta: map[string]string{"radio.country": "Norway", "radio.codec": "MP3", "radio.bitrate": "192", "radio.state": "Oslo", "radio.name": "NRK P3"},
 	}
 	if !reflect.DeepEqual(tracks[0], want) {
 		t.Errorf("track = %+v, want %+v", tracks[0], want)

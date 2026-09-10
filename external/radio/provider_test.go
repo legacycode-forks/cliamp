@@ -249,6 +249,27 @@ func TestProviderToggleFavoriteTrackFromLoadedCatalogPlaylist(t *testing.T) {
 	}
 }
 
+func TestProviderToggleFavoriteTrackRetainsRawNameFromLoadedGenreResults(t *testing.T) {
+	p := newTestProvider(t)
+	station := CatalogStation{
+		Name: "NRK P3", URL: "https://nrk.example/p3",
+		Country: "Norway", Tags: "pop,rock", Codec: "MP3", Bitrate: 192,
+	}
+	track := stationTracks([]CatalogStation{station})[0]
+	if track.Title != "NRK P3 [192k] · Norway" {
+		t.Fatalf("loaded track title = %q, want formatted name", track.Title)
+	}
+
+	added, name, err := p.ToggleFavoriteTrack(track)
+	if err != nil || !added || name != station.Name {
+		t.Fatalf("ToggleFavoriteTrack = (%v, %q, %v), want (true, %q, nil)", added, name, err, station.Name)
+	}
+	favorites := p.favorites.Stations()
+	if len(favorites) != 1 || favorites[0].Name != station.Name {
+		t.Fatalf("stored favorites = %+v, want raw station name %q", favorites, station.Name)
+	}
+}
+
 func TestProviderToggleFavoriteInvalidIdx(t *testing.T) {
 	p := newTestProvider(t)
 	_, _, err := p.ToggleFavorite("c:99")
