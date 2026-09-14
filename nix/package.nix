@@ -14,6 +14,7 @@
   stdenv,
   symlinkJoin,
   version ? "dev",
+  versionCheckHook,
   yt-dlp,
 }:
 
@@ -45,6 +46,8 @@ buildGoModule {
     pkg-config
   ];
 
+  nativeInstallCheckInputs = [ versionCheckHook ];
+
   buildInputs = [
     flac
     libogg
@@ -56,6 +59,12 @@ buildGoModule {
   ];
   # On darwin the CoreAudio/MediaPlayer/AppKit frameworks referenced by the
   # cgo files come from the Apple SDK that stdenv provides by default.
+
+  # macOS limits Unix socket paths to 104 bytes. Keep the temporary build
+  # directory short so IPC tests can bind their sockets successfully.
+  preCheck = lib.optionalString stdenv.hostPlatform.isDarwin ''
+    export TMPDIR="$(mktemp -d /tmp/cliamp-XXXXXX)"
+  '';
 
   ldflags = [
     "-s"
