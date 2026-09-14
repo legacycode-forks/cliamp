@@ -220,6 +220,28 @@ func TestNilStoreSafe(t *testing.T) {
 	}
 }
 
+func TestInvalidFileReturnsErrorInsteadOfEmptyStore(t *testing.T) {
+	s := newTestStore(t)
+	if err := os.WriteFile(s.Path(), []byte("[[entry]]\npath = \"/a\"\npath = ["), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.Recent(0); err == nil {
+		t.Fatal("invalid TOML should return an error")
+	}
+}
+
+func TestRepeatedKeyLastValueWins(t *testing.T) {
+	s := newTestStore(t)
+	raw := "[[entry]]\nplayed_at = \"2026-01-01T00:00:00Z\"\npath = \"/old\"\npath = \"/new\"\n"
+	if err := os.WriteFile(s.Path(), []byte(raw), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	entries, err := s.Recent(0)
+	if err != nil || len(entries) != 1 || entries[0].Track.Path != "/new" {
+		t.Fatalf("entries = %#v, err=%v", entries, err)
+	}
+}
+
 func TestLoadHealsLegacyDuplicates(t *testing.T) {
 	s := newTestStore(t)
 	// A file written by an older version that appended repeats: /a.mp3 twice.
@@ -264,5 +286,25 @@ title = "A"
 	}
 	if len(got) != 3 {
 		t.Fatalf("entries = %d, want 3 after a clean rewrite", len(got))
+	}
+}
+
+func TestLoadInlineCommentsAndQuotedHash(t *testing.T) {
+	s := newTestStore(t)
+	raw := `[[entry]]
+played_at = "2026-01-01T12:00:00Z" # timestamp
+path = "https://example.com/a#b" # URL fragment
+title = "A # song" # title comment
+unknown = "ignored"
+`
+	if err := os.WriteFile(s.Path(), []byte(raw), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	entries, err := s.Recent(0)
+	if err != nil {
+		t.Fatalf("Recent: %v", err)
+	}
+	if len(entries) != 1 || entries[0].Track.Path != "https://example.com/a#b" || entries[0].Track.Title != "A # song" {
+		t.Fatalf("quoted hash/comment parsing wrong: %+v", entries)
 	}
 }

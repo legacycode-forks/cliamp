@@ -229,6 +229,26 @@ func TestToggleIgnoresEmptyPath(t *testing.T) {
 	}
 }
 
+func TestLoadInlineCommentsAndQuotedHash(t *testing.T) {
+	s := newTestStore(t)
+	raw := `[[entry]]
+favorited_at = "2026-01-01T12:00:00Z" # timestamp
+path = "https://example.com/a#b" # URL fragment
+title = "A # song" # title comment
+unknown = "ignored"
+`
+	if err := os.WriteFile(s.Path(), []byte(raw), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	tracks, err := s.Tracks()
+	if err != nil {
+		t.Fatalf("Tracks: %v", err)
+	}
+	if len(tracks) != 1 || tracks[0].Path != "https://example.com/a#b" || tracks[0].Title != "A # song" {
+		t.Fatalf("quoted hash/comment parsing wrong: %+v", tracks)
+	}
+}
+
 func TestTracksEmpty(t *testing.T) {
 	s := newTestStore(t)
 	tracks, err := s.Tracks()
@@ -237,6 +257,28 @@ func TestTracksEmpty(t *testing.T) {
 	}
 	if len(tracks) != 0 {
 		t.Fatalf("empty Tracks = %d, want 0", len(tracks))
+	}
+}
+
+func TestInvalidFileReturnsErrorInsteadOfEmptyStore(t *testing.T) {
+	s := newTestStore(t)
+	if err := os.WriteFile(s.Path(), []byte("[[entry]]\npath = \"/a\"\npath = ["), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.Tracks(); err == nil {
+		t.Fatal("invalid TOML should return an error")
+	}
+}
+
+func TestRepeatedKeyLastValueWins(t *testing.T) {
+	s := newTestStore(t)
+	raw := "[[entry]]\nfavorited_at = \"2026-01-01T00:00:00Z\"\npath = \"/old\"\npath = \"/new\"\n"
+	if err := os.WriteFile(s.Path(), []byte(raw), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	tracks, err := s.Tracks()
+	if err != nil || len(tracks) != 1 || tracks[0].Path != "/new" {
+		t.Fatalf("tracks = %#v, err=%v", tracks, err)
 	}
 }
 

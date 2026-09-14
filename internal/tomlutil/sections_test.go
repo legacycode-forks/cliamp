@@ -1,9 +1,22 @@
 package tomlutil
 
 import (
+	"bytes"
 	"reflect"
 	"testing"
 )
+
+func TestRemoveRepeatedKeysKeepsLastValuePerArrayTable(t *testing.T) {
+	data := []byte("[[entry]]\npath = \"/a\"\npath = \"/b\"\n\n[[entry]]\npath = \"/c\"\n")
+	got, err := RemoveRepeatedKeys(data)
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := []byte("[[entry]]\n\npath = \"/b\"\n\n[[entry]]\npath = \"/c\"\n")
+	if !bytes.Equal(got, want) {
+		t.Fatalf("normalized = %q, want %q", got, want)
+	}
+}
 
 func TestParseSections(t *testing.T) {
 	data := []byte(`

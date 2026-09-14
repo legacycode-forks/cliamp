@@ -15,7 +15,6 @@ import (
 	"os"
 	"path/filepath"
 	"slices"
-	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -247,7 +246,11 @@ func (s *Store) loadLocked() ([]Entry, error) {
 	if err != nil {
 		return nil, fmt.Errorf("read favorites: %w", err)
 	}
-	return parse(data), nil
+	entries, err := parse(data)
+	if err != nil {
+		return entries, err
+	}
+	return entries, nil
 }
 
 func (s *Store) saveLocked(entries []Entry) error {
@@ -299,81 +302,43 @@ func writeEntry(w io.Writer, e Entry) {
 }
 
 // parse skips unknown keys to keep the on-disk format forward-compatible.
-func parse(data []byte) []Entry {
-	var entries []Entry
-	var cur *Entry
-
-	flush := func() {
-		if cur != nil {
-			entries = append(entries, *cur)
-		}
+func parse(data []byte) ([]Entry, error) {
+	normalized, err := tomlutil.RemoveRepeatedKeys(data)
+	if err != nil {
+		return nil, fmt.Errorf("parse favorites TOML: %w", err)
 	}
-
-	for rawLine := range strings.SplitSeq(string(data), "\n") {
-		line := strings.TrimSpace(rawLine)
-		if line == "" || strings.HasPrefix(line, "#") {
-			continue
-		}
-		if line == "[[entry]]" {
-			flush()
-			cur = &Entry{}
-			continue
-		}
-		if cur == nil {
-			continue
-		}
-		key, val, ok := strings.Cut(line, "=")
-		if !ok {
-			continue
-		}
-		key = strings.TrimSpace(key)
-		val = tomlutil.Unquote(strings.TrimSpace(val))
-		switch key {
-		case "favorited_at":
-			if t, err := time.Parse(time.RFC3339, val); err == nil {
-				cur.FavoritedAt = t
-			}
-		case "path":
-			cur.Track.Path = val
-			cur.Track.Stream = playlist.IsURL(val)
-		case "title":
-			cur.Track.Title = val
-		case "artist":
-			cur.Track.Artist = val
-		case "album":
-			cur.Track.Album = val
-		case "genre":
-			cur.Track.Genre = val
-		case "year":
-			if n, err := strconv.Atoi(val); err == nil {
-				cur.Track.Year = n
-			}
-		case "track_number":
-			if n, err := strconv.Atoi(val); err == nil {
-				cur.Track.TrackNumber = n
-			}
-		case "duration_secs":
-			if n, err := strconv.Atoi(val); err == nil {
-				cur.Track.DurationSecs = n
-			}
-		case "feed":
-			cur.Track.Feed = val == "true"
-		case "realtime":
-			cur.Track.Realtime = val == "true"
-		default:
-			if metaKey, ok := strings.CutPrefix(key, "provider_meta."); ok {
-				if cur.Track.ProviderMeta == nil {
-					cur.Track.ProviderMeta = make(map[string]string)
-				}
-				cur.Track.ProviderMeta[metaKey] = val
-			}
-		}
+	var raw struct {
+		Entries []favoriteTOML `toml:"entry"`
 	}
-	flush()
+	if err := tomlutil.Decode(normalized, &raw); err != nil {
+		return nil, fmt.Errorf("decode favorites TOML: %w", err)
+	}
+	entries := make([]Entry, 0, len(raw.Entries))
+	var invalid error
+	for i, e := range raw.Entries {
+		if strings.TrimSpace(e.Path) == "" {
+			if invalid == nil {
+				invalid = fmt.Errorf("favorite entry %d has empty path", i+1)
+			}
+			continue
+		}
+		at, _ := time.Parse(time.RFC3339, e.FavoritedAt)
+		entries = append(entries, Entry{FavoritedAt: at, Track: playlist.Track{Path: e.Path, Title: e.Title, Artist: e.Artist, Album: e.Album, Genre: e.Genre, Year: e.Year, TrackNumber: e.TrackNumber, DurationSecs: e.DurationSecs, Feed: e.Feed, Realtime: e.Realtime, Stream: playlist.IsURL(e.Path), ProviderMeta: tomlutil.FlattenStringMap(e.ProviderMeta)}})
+	}
+	return entries, invalid
+}
 
-	// Drop entries that failed to parse a path (the only required field).
-	entries = slices.DeleteFunc(entries, func(e Entry) bool {
-		return strings.TrimSpace(e.Track.Path) == ""
-	})
-	return entries
+type favoriteTOML struct {
+	FavoritedAt  string         `toml:"favorited_at"`
+	Path         string         `toml:"path"`
+	Title        string         `toml:"title"`
+	Artist       string         `toml:"artist"`
+	Album        string         `toml:"album"`
+	Genre        string         `toml:"genre"`
+	Year         int            `toml:"year"`
+	TrackNumber  int            `toml:"track_number"`
+	DurationSecs int            `toml:"duration_secs"`
+	Feed         bool           `toml:"feed"`
+	Realtime     bool           `toml:"realtime"`
+	ProviderMeta map[string]any `toml:"provider_meta"`
 }

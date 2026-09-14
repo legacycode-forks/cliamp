@@ -7,7 +7,6 @@ import (
 	"os"
 	"path/filepath"
 	"slices"
-	"strconv"
 	"strings"
 	"sync"
 
@@ -173,23 +172,27 @@ func loadFavoriteStations(path string) ([]CatalogStation, error) {
 		return nil, err
 	}
 
-	var stations []CatalogStation
-	tomlutil.ParseSections(data, "station", func(f map[string]string) {
-		s := CatalogStation{
-			Name:     f["name"],
-			URL:      f["url"],
-			Country:  f["country"],
-			State:    f["state"],
-			Codec:    f["codec"],
-			Tags:     f["tags"],
-			Homepage: f["homepage"],
-		}
-		if n, err := strconv.Atoi(f["bitrate"]); err == nil {
-			s.Bitrate = n
-		}
+	var raw struct {
+		Stations []struct {
+			Name     string `toml:"name"`
+			URL      string `toml:"url"`
+			Country  string `toml:"country"`
+			State    string `toml:"state"`
+			Codec    string `toml:"codec"`
+			Tags     string `toml:"tags"`
+			Homepage string `toml:"homepage"`
+			Bitrate  int    `toml:"bitrate"`
+		} `toml:"station"`
+	}
+	if err := tomlutil.Decode(data, &raw); err != nil {
+		return nil, fmt.Errorf("decode radio favorites TOML: %w", err)
+	}
+	stations := make([]CatalogStation, 0, len(raw.Stations))
+	for _, item := range raw.Stations {
+		s := CatalogStation{Name: item.Name, URL: item.URL, Country: item.Country, State: item.State, Codec: item.Codec, Tags: item.Tags, Homepage: item.Homepage, Bitrate: item.Bitrate}
 		if s.Name != "" && s.URL != "" {
 			stations = append(stations, s)
 		}
-	})
+	}
 	return stations, nil
 }

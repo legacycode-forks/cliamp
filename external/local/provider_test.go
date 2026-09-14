@@ -208,6 +208,25 @@ title = "A"
 	}
 }
 
+func TestLoadTOMLInlineCommentsAndQuotedHash(t *testing.T) {
+	p := newTestProvider(t)
+	os.MkdirAll(p.dir, 0o755)
+	content := `[[track]]
+path = "/music/hash#song.mp3" # trailing comment
+title = "A # song" # another comment
+`
+	if err := os.WriteFile(filepath.Join(p.dir, "hash.toml"), []byte(content), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	tracks, err := p.Tracks("hash")
+	if err != nil {
+		t.Fatalf("Tracks: %v", err)
+	}
+	if len(tracks) != 1 || tracks[0].Path != "/music/hash#song.mp3" || tracks[0].Title != "A # song" {
+		t.Fatalf("quoted hash/comment parsing wrong: %+v", tracks)
+	}
+}
+
 // --- Playlists ---
 
 func TestPlaylistsEmpty(t *testing.T) {

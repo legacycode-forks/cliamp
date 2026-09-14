@@ -2,18 +2,21 @@
 package config
 
 import (
-	"bufio"
+	"bytes"
 	"errors"
 	"fmt"
 	"io/fs"
 	"os"
 	"path/filepath"
+	"reflect"
 	"strconv"
 	"strings"
 	"time"
 
 	"github.com/bjarneo/cliamp/internal/appdir"
 	"github.com/bjarneo/cliamp/internal/fileutil"
+	"github.com/bjarneo/cliamp/internal/tomlutil"
+	"github.com/pelletier/go-toml/v2"
 )
 
 // maxVisRows caps the configurable visualizer height. The layout shrinks the
@@ -27,42 +30,6 @@ func configPath() (string, error) {
 		return "", err
 	}
 	return filepath.Join(dir, "config.toml"), nil
-}
-
-// stripInlineComment removes a TOML comment that starts outside a quoted value.
-func stripInlineComment(s string) string {
-	var quote byte
-	escaped := false
-	for i := 0; i < len(s); i++ {
-		c := s[i]
-		if quote == '"' {
-			if escaped {
-				escaped = false
-				continue
-			}
-			if c == '\\' {
-				escaped = true
-				continue
-			}
-			if c == quote {
-				quote = 0
-			}
-			continue
-		}
-		if quote == '\'' {
-			if c == quote {
-				quote = 0
-			}
-			continue
-		}
-		switch c {
-		case '"', '\'':
-			quote = c
-		case '#':
-			return strings.TrimSpace(s[:i])
-		}
-	}
-	return strings.TrimSpace(s)
 }
 
 // parseString trims surrounding quotes from a TOML string value and, if the
@@ -107,12 +74,12 @@ func isEnvName(s string) bool {
 // NavidromeConfig holds credentials for a Navidrome/Subsonic server.
 // All three fields must be non-empty for a client to be constructed.
 type NavidromeConfig struct {
-	URL              string // e.g. "https://music.example.com"
-	User             string
-	Password         string
-	Format           string // requested stream format; empty lets the server decide, "raw" requests the original
-	BrowseSort       string // album browse sort order, e.g. "alphabeticalByName"
-	ScrobbleDisabled bool   // true only when "scrobble = false" is explicitly set
+	URL              string `toml:"url"` // e.g. "https://music.example.com"
+	User             string `toml:"user"`
+	Password         string `toml:"password"`
+	Format           string `toml:"format"`            // requested stream format; empty lets the server decide, "raw" requests the original
+	BrowseSort       string `toml:"browse_sort"`       // album browse sort order, e.g. "alphabeticalByName"
+	ScrobbleDisabled bool   `toml:"scrobble_disabled"` // true only when "scrobble = false" is explicitly set
 }
 
 // IsSet reports whether all three Navidrome credentials are present.
@@ -124,12 +91,12 @@ func (n NavidromeConfig) IsSet() bool {
 // User and Password are optional — they are only needed when the server has
 // password protection enabled.
 type LyrionConfig struct {
-	URL      string // e.g. "http://nas.local:9000"
-	User     string
-	Password string
+	URL      string `toml:"url"` // e.g. "http://nas.local:9000"
+	User     string `toml:"user"`
+	Password string `toml:"password"`
 	// ShowUnplayable includes tracks and playlists contributed by LMS server
 	// plugins, which the server cannot stream to cliamp. Hidden by default.
-	ShowUnplayable bool
+	ShowUnplayable bool `toml:"show_unplayable"`
 }
 
 // IsSet reports whether a Lyrion server URL is configured. Credentials are
@@ -144,10 +111,10 @@ func (l LyrionConfig) IsSet() bool {
 // who never registered their own developer app — see Spotify's Nov 27, 2024
 // dev-mode quota restriction.
 type SpotifyConfig struct {
-	Disabled bool   // true only when user explicitly sets enabled = false
-	Enabled  bool   // true when [spotify] section exists (even without client_id)
-	ClientID string // Spotify Developer app client ID (overrides built-in fallback)
-	Bitrate  int    // preferred Spotify stream bitrate in kbps
+	Disabled bool   `toml:"disabled"`  // true only when user explicitly sets enabled = false
+	Enabled  bool   `toml:"enabled"`   // true when [spotify] section exists (even without client_id)
+	ClientID string `toml:"client_id"` // Spotify Developer app client ID (overrides built-in fallback)
+	Bitrate  int    `toml:"bitrate"`   // preferred Spotify stream bitrate in kbps
 }
 
 // IsSet reports whether the Spotify provider should be shown. Section presence
@@ -170,9 +137,9 @@ func (s SpotifyConfig) ResolveClientID(fallbackID string) string {
 // key are scraped automatically from the Qobuz web player, so no developer
 // credentials are needed. Sign-in is an interactive OAuth browser flow.
 type QobuzConfig struct {
-	Disabled bool // true only when user explicitly sets enabled = false
-	Enabled  bool // true when [qobuz] section exists
-	Quality  int  // preferred stream format_id: 5 (MP3 320), 6 (FLAC CD), 7 (Hi-Res <=96kHz), 27 (Hi-Res <=192kHz)
+	Disabled bool `toml:"disabled"` // true only when user explicitly sets enabled = false
+	Enabled  bool `toml:"enabled"`  // true when [qobuz] section exists
+	Quality  int  `toml:"quality"`  // preferred stream format_id: 5 (MP3 320), 6 (FLAC CD), 7 (Hi-Res <=96kHz), 27 (Hi-Res <=192kHz)
 }
 
 // IsSet reports whether the Qobuz provider should be shown. Section presence
@@ -187,11 +154,11 @@ func (q QobuzConfig) IsSet() bool {
 // when none are configured; Tidal revokes leaked client IDs periodically, so
 // client_id/client_secret can be overridden without waiting for a release.
 type TidalConfig struct {
-	Disabled     bool   // true only when user explicitly sets enabled = false
-	Enabled      bool   // true when [tidal] section exists
-	ClientID     string // OAuth client ID (overrides built-in fallback)
-	ClientSecret string // OAuth client secret (overrides built-in fallback)
-	Quality      string // preferred quality: "low", "high", "lossless", "hires"
+	Disabled     bool   `toml:"disabled"`      // true only when user explicitly sets enabled = false
+	Enabled      bool   `toml:"enabled"`       // true when [tidal] section exists
+	ClientID     string `toml:"client_id"`     // OAuth client ID (overrides built-in fallback)
+	ClientSecret string `toml:"client_secret"` // OAuth client secret (overrides built-in fallback)
+	Quality      string `toml:"quality"`       // preferred quality: "low", "high", "lossless", "hires"
 }
 
 // IsSet reports whether the Tidal provider should be shown. Section presence
@@ -204,12 +171,12 @@ func (t TidalConfig) IsSet() bool {
 // If no client_id/client_secret are set, built-in fallback credentials are
 // used automatically (same pattern as Spotify).
 type YouTubeMusicConfig struct {
-	Disabled       bool   // true only when user explicitly sets enabled = false
-	Enabled        bool   // true when [ytmusic] section exists (even without credentials)
-	ClientID       string // Google Cloud OAuth2 client ID (overrides built-in fallback)
-	ClientSecret   string // Google Cloud OAuth2 client secret (overrides built-in fallback)
-	CookiesFrom    string // browser name for yt-dlp --cookies-from-browser (e.g. "chrome", "firefox")
-	ExpandPlaylist *bool  // nil = default (true), controls whether list= URLs expand the full playlist
+	Disabled       bool   `toml:"disabled"`        // true only when user explicitly sets enabled = false
+	Enabled        bool   `toml:"enabled"`         // true when [ytmusic] section exists (even without credentials)
+	ClientID       string `toml:"client_id"`       // Google Cloud OAuth2 client ID (overrides built-in fallback)
+	ClientSecret   string `toml:"client_secret"`   // Google Cloud OAuth2 client secret (overrides built-in fallback)
+	CookiesFrom    string `toml:"cookies_from"`    // browser name for yt-dlp --cookies-from-browser (e.g. "chrome", "firefox")
+	ExpandPlaylist *bool  `toml:"expand_playlist"` // nil = default (true), controls whether list= URLs expand the full playlist
 }
 
 // IsSetOrFallback returns true when YouTube providers should be enabled,
@@ -252,12 +219,12 @@ type RadioConfig struct {
 	// country's regions in the country browser, and is the first stop of the
 	// catalog country filter. Unset means "detect from the system timezone,
 	// then the locale"; set it to "none" to turn detection off.
-	Country string
+	Country string `toml:"country"`
 }
 
 // PodcastConfig tunes the always-available public podcast directory.
 type PodcastConfig struct {
-	Country string // two-letter country code for Apple charts (default "us")
+	Country string `toml:"country"` // two-letter country code for Apple charts (default "us")
 }
 
 // SoundCloudConfig holds settings for the SoundCloud provider.
@@ -266,9 +233,9 @@ type PodcastConfig struct {
 // in the browse view. Setting CookiesFrom (browser name) lets yt-dlp use the
 // user's signed-in session for subscriber-gated tracks.
 type SoundCloudConfig struct {
-	Enabled     bool   // true only when user explicitly sets enabled = true
-	User        string // SoundCloud username for browse (optional)
-	CookiesFrom string // browser name for yt-dlp --cookies-from-browser (optional)
+	Enabled     bool   `toml:"enabled"`      // true only when user explicitly sets enabled = true
+	User        string `toml:"user"`         // SoundCloud username for browse (optional)
+	CookiesFrom string `toml:"cookies_from"` // browser name for yt-dlp --cookies-from-browser (optional)
 }
 
 // IsSet reports whether the SoundCloud provider should be shown.
@@ -279,14 +246,14 @@ func (s SoundCloudConfig) IsSet() bool { return s.Enabled }
 // token adds /me and Listen Later; browser cookies are used only by yt-dlp for
 // playback that needs the listener's signed-in Mixcloud session.
 type MixcloudConfig struct {
-	Enabled        bool
-	Username       string
-	AccessToken    string
-	CookiesFrom    string
-	Styles         []string
-	StylesSet      bool // distinguishes omitted styles (defaults) from an explicit empty list
-	MaxItems       int
-	StreamCreators int
+	Enabled        bool     `toml:"enabled"`
+	Username       string   `toml:"username"`
+	AccessToken    string   `toml:"access_token"`
+	CookiesFrom    string   `toml:"cookies_from"`
+	Styles         []string `toml:"styles"`
+	StylesSet      bool     `toml:"styles_set"` // distinguishes omitted styles (defaults) from an explicit empty list
+	MaxItems       int      `toml:"max_items"`
+	StreamCreators int      `toml:"stream_creators"`
 }
 
 // IsSet reports whether the Mixcloud provider should be shown.
@@ -296,9 +263,9 @@ func (m MixcloudConfig) IsSet() bool { return m.Enabled }
 // The provider is opt-in and can reuse an existing browser session through
 // yt-dlp's --cookies-from-browser support.
 type NetEaseConfig struct {
-	Enabled     bool   // true only when user explicitly sets enabled = true
-	CookiesFrom string // browser name for account APIs and playback (e.g. "chrome")
-	UserID      string // optional account user id; setup can discover this from cookies
+	Enabled     bool   `toml:"enabled"`      // true only when user explicitly sets enabled = true
+	CookiesFrom string `toml:"cookies_from"` // browser name for account APIs and playback (e.g. "chrome")
+	UserID      string `toml:"user_id"`      // optional account user id; setup can discover this from cookies
 }
 
 // IsSet reports whether the NetEase provider should be shown.
@@ -308,8 +275,8 @@ func (n NetEaseConfig) IsSet() bool { return n.Enabled }
 // The provider is opt-in and authenticates with a personal OAuth token
 // obtained from https://oauth.yandex.ru/authorize?response_type=token&client_id=23cabbbdc6cd418abb4b39c32c41195d
 type YandexConfig struct {
-	Enabled bool   // true only when user explicitly sets enabled = true
-	Token   string // personal OAuth token
+	Enabled bool   `toml:"enabled"` // true only when user explicitly sets enabled = true
+	Token   string `toml:"token"`   // personal OAuth token
 }
 
 // IsSet reports whether the Yandex provider should be shown.
@@ -318,9 +285,9 @@ func (y YandexConfig) IsSet() bool { return y.Enabled && strings.TrimSpace(y.Tok
 // PlexConfig holds credentials for a Plex Media Server.
 // Both URL and Token must be non-empty for a client to be constructed.
 type PlexConfig struct {
-	URL       string   // e.g. "http://192.168.1.10:32400"
-	Token     string   // X-Plex-Token
-	Libraries []string // optional: restrict to these music library names
+	URL       string   `toml:"url"`       // e.g. "http://192.168.1.10:32400"
+	Token     string   `toml:"token"`     // X-Plex-Token
+	Libraries []string `toml:"libraries"` // optional: restrict to these music library names
 }
 
 // IsSet reports whether both Plex credentials are present.
@@ -332,11 +299,11 @@ func (p PlexConfig) IsSet() bool {
 // URL is required. Authenticate either with Token, or with User+Password.
 // UserID is optional and can be discovered lazily.
 type JellyfinConfig struct {
-	URL      string // e.g. "https://jellyfin.example.com"
-	Token    string // API access token
-	User     string // optional username for password-based login
-	Password string // optional password for password-based login
-	UserID   string // optional user id to skip discovery via /Users/Me
+	URL      string `toml:"url"`      // e.g. "https://jellyfin.example.com"
+	Token    string `toml:"token"`    // API access token
+	User     string `toml:"user"`     // optional username for password-based login
+	Password string `toml:"password"` // optional password for password-based login
+	UserID   string `toml:"user_id"`  // optional user id to skip discovery via /Users/Me
 }
 
 // IsSet reports whether the Jellyfin provider is configured.
@@ -348,11 +315,11 @@ func (j JellyfinConfig) IsSet() bool {
 // URL is required. Authenticate either with Token, or with User+Password.
 // UserID is optional and can be discovered lazily.
 type EmbyConfig struct {
-	URL      string // e.g. "https://emby.example.com"
-	Token    string // API access token
-	User     string // optional username for password-based login
-	Password string // optional password for password-based login
-	UserID   string // optional user id to skip discovery via /Users/Me
+	URL      string `toml:"url"`      // e.g. "https://emby.example.com"
+	Token    string `toml:"token"`    // API access token
+	User     string `toml:"user"`     // optional username for password-based login
+	Password string `toml:"password"` // optional password for password-based login
+	UserID   string `toml:"user_id"`  // optional user id to skip discovery via /Users/Me
 }
 
 // IsSet reports whether the Emby provider is configured.
@@ -363,11 +330,11 @@ func (e EmbyConfig) IsSet() bool {
 // AudiobookshelfConfig holds credentials for an Audiobookshelf server.
 // URL is required. Authenticate either with Token, or with User+Password.
 type AudiobookshelfConfig struct {
-	URL       string   // e.g. "https://abs.example.com"
-	Token     string   // API key or login token
-	User      string   // optional username for password-based login
-	Password  string   // optional password for password-based login
-	Libraries []string // optional: restrict to these library names
+	URL       string   `toml:"url"`       // e.g. "https://abs.example.com"
+	Token     string   `toml:"token"`     // API key or login token
+	User      string   `toml:"user"`      // optional username for password-based login
+	Password  string   `toml:"password"`  // optional password for password-based login
+	Libraries []string `toml:"libraries"` // optional: restrict to these library names
 }
 
 // IsSet reports whether the Audiobookshelf provider is configured.
@@ -377,54 +344,54 @@ func (a AudiobookshelfConfig) IsSet() bool {
 
 // Config holds user preferences loaded from the config file.
 type Config struct {
-	Volume           float64     // dB, clamped at runtime to [VolumeMin, +6]
-	VolumeMin        float64     // dB floor, range [-90, 0]; default -50
-	VisVolumeLinked  bool        // when true, visualizer bar height follows volume; default true
-	EQ               [10]float64 // per-band gain in dB, range [-12, +12]
-	EQPreset         string      // preset name, or "" for custom
-	Repeat           string      // "off", "all", or "one"
-	Shuffle          bool
-	Mono             bool
-	Speed            float64                      // playback speed ratio: 0.25–2.0 (default 1.0)
-	AutoPlay         bool                         // start playback automatically on launch (radio streams, CLI tracks)
-	SeekStepLarge    int                          // seconds for Shift+Left/Right seek jumps
-	Provider         string                       // default provider: "radio", "podcast", "navidrome", "lyrion", "spotify", "qobuz", "tidal", "plex", "jellyfin", "emby", "audiobookshelf", "soundcloud", "mixcloud", "netease", "yandex", "ytmusic" (default "radio")
-	Theme            string                       // theme name, or "" for ANSI default
-	Visualizer       string                       // visualizer mode name, or "" for default (Bars)
-	VisRows          int                          // visualizer height in rows at the full layout tier, or 0 for the built-in default
-	SampleRate       int                          // output sample rate: 22050, 44100, 48000, 96000, 192000
-	BufferMs         int                          // speaker buffer in milliseconds (50-5000)
-	ResampleQuality  int                          // beep resample quality factor (1–4)
-	BitDepth         int                          // PCM bit depth for FFmpeg output: 16 or 32
-	Simplified       bool                         // simplified playback view: track summary and time strip
-	HideHelpBar      bool                         // hide the key-binding hint bar above the status line
-	HideSettingsPane bool                         // close the settings pane beside the playlist
-	ShowMetadata     bool                         // expand highlighted-track metadata below settings (default false)
-	Expanded         bool                         // start with the playlist expanded (the Ctrl+X state)
-	PaddingH         int                          // horizontal padding for the UI frame (default 3)
-	PaddingV         int                          // vertical padding for the UI frame (default 1)
-	AudioDevice      string                       // preferred audio output device name (empty = system default)
-	Playlist         string                       // local TOML playlist name to load on startup
-	InitialDirectory string                       // initial directory for the file browser
-	Navidrome        NavidromeConfig              // optional Navidrome/Subsonic server credentials
-	Lyrion           LyrionConfig                 // optional Lyrion Music Server (LMS) instance
-	Spotify          SpotifyConfig                // optional Spotify provider (requires Premium)
-	Qobuz            QobuzConfig                  // optional Qobuz provider (requires subscription)
-	Tidal            TidalConfig                  // optional Tidal provider (requires subscription)
-	YouTubeMusic     YouTubeMusicConfig           // optional YouTube Music provider
-	Plex             PlexConfig                   // optional Plex Media Server credentials
-	Jellyfin         JellyfinConfig               // optional Jellyfin server credentials
-	Emby             EmbyConfig                   // optional Emby server credentials
-	Audiobookshelf   AudiobookshelfConfig         // optional Audiobookshelf server credentials
-	Radio            RadioConfig                  // built-in Radio provider settings
-	Podcast          PodcastConfig                // built-in podcast directory settings
-	SoundCloud       SoundCloudConfig             // SoundCloud provider (opt-in via enabled = true)
-	Mixcloud         MixcloudConfig               // Mixcloud provider (opt-in via enabled = true)
-	NetEase          NetEaseConfig                // NetEase Cloud Music provider (opt-in via enabled = true)
-	Yandex           YandexConfig                 // Yandex Music provider (opt-in via enabled = true)
-	Plugins          map[string]map[string]string // per-plugin config from [plugins.*] sections
-	LogLevel         string                       // log level: debug, info, warn, error (default "info")
-	LowPower         bool                         // reduce CPU by lowering UI cadence and disabling visualization
+	Volume           float64                      `toml:"volume"`            // dB, clamped at runtime to [VolumeMin, +6]
+	VolumeMin        float64                      `toml:"volume_min"`        // dB floor, range [-90, 0]; default -50
+	VisVolumeLinked  bool                         `toml:"vis_volume_linked"` // when true, visualizer bar height follows volume; default true
+	EQ               [10]float64                  `toml:"eq"`                // per-band gain in dB, range [-12, +12]
+	EQPreset         string                       `toml:"eq_preset"`         // preset name, or "" for custom
+	Repeat           string                       `toml:"repeat"`            // "off", "all", or "one"
+	Shuffle          bool                         `toml:"shuffle"`
+	Mono             bool                         `toml:"mono"`
+	Speed            float64                      `toml:"speed"`               // playback speed ratio: 0.25–2.0 (default 1.0)
+	AutoPlay         bool                         `toml:"auto_play"`           // start playback automatically on launch (radio streams, CLI tracks)
+	SeekStepLarge    int                          `toml:"seek_large_step_sec"` // seconds for Shift+Left/Right seek jumps
+	Provider         string                       `toml:"provider"`            // default provider: "radio", "podcast", "navidrome", "lyrion", "spotify", "qobuz", "tidal", "plex", "jellyfin", "emby", "audiobookshelf", "soundcloud", "mixcloud", "netease", "yandex", "ytmusic" (default "radio")
+	Theme            string                       `toml:"theme"`               // theme name, or "" for ANSI default
+	Visualizer       string                       `toml:"visualizer"`          // visualizer mode name, or "" for default (Bars)
+	VisRows          int                          `toml:"vis_rows"`            // visualizer height in rows at the full layout tier, or 0 for the built-in default
+	SampleRate       int                          `toml:"sample_rate"`         // output sample rate: 22050, 44100, 48000, 96000, 192000
+	BufferMs         int                          `toml:"buffer_ms"`           // speaker buffer in milliseconds (50-5000)
+	ResampleQuality  int                          `toml:"resample_quality"`    // beep resample quality factor (1–4)
+	BitDepth         int                          `toml:"bit_depth"`           // PCM bit depth for FFmpeg output: 16 or 32
+	Simplified       bool                         `toml:"simplified"`          // simplified playback view: track summary and time strip
+	HideHelpBar      bool                         `toml:"hide_help_bar"`       // hide the key-binding hint bar above the status line
+	HideSettingsPane bool                         `toml:"hide_settings_pane"`  // close the settings pane beside the playlist
+	ShowMetadata     bool                         `toml:"show_metadata"`       // expand highlighted-track metadata below settings (default false)
+	Expanded         bool                         `toml:"expanded"`            // start with the playlist expanded (the Ctrl+X state)
+	PaddingH         int                          `toml:"padding_horizontal"`  // horizontal padding for the UI frame (default 3)
+	PaddingV         int                          `toml:"padding_vertical"`    // vertical padding for the UI frame (default 1)
+	AudioDevice      string                       `toml:"audio_device"`        // preferred audio output device name (empty = system default)
+	Playlist         string                       `toml:"playlist"`            // local TOML playlist name to load on startup
+	InitialDirectory string                       `toml:"initial_directory"`   // initial directory for the file browser
+	Navidrome        NavidromeConfig              `toml:"navidrome"`           // optional Navidrome/Subsonic server credentials
+	Lyrion           LyrionConfig                 `toml:"lyrion"`              // optional Lyrion Music Server (LMS) instance
+	Spotify          SpotifyConfig                `toml:"spotify"`             // optional Spotify provider (requires Premium)
+	Qobuz            QobuzConfig                  `toml:"qobuz"`               // optional Qobuz provider (requires subscription)
+	Tidal            TidalConfig                  `toml:"tidal"`               // optional Tidal provider (requires subscription)
+	YouTubeMusic     YouTubeMusicConfig           `toml:"ytmusic"`             // optional YouTube Music provider
+	Plex             PlexConfig                   `toml:"plex"`                // optional Plex Media Server credentials
+	Jellyfin         JellyfinConfig               `toml:"jellyfin"`            // optional Jellyfin server credentials
+	Emby             EmbyConfig                   `toml:"emby"`                // optional Emby server credentials
+	Audiobookshelf   AudiobookshelfConfig         `toml:"audiobookshelf"`      // optional Audiobookshelf server credentials
+	Radio            RadioConfig                  `toml:"radio"`               // built-in Radio provider settings
+	Podcast          PodcastConfig                `toml:"podcast"`             // built-in podcast directory settings
+	SoundCloud       SoundCloudConfig             `toml:"soundcloud"`          // SoundCloud provider (opt-in via enabled = true)
+	Mixcloud         MixcloudConfig               `toml:"mixcloud"`            // Mixcloud provider (opt-in via enabled = true)
+	NetEase          NetEaseConfig                `toml:"netease"`             // NetEase Cloud Music provider (opt-in via enabled = true)
+	Yandex           YandexConfig                 `toml:"yandex"`              // Yandex Music provider (opt-in via enabled = true)
+	Plugins          map[string]map[string]string `toml:"-"`                   // per-plugin config from [plugins.*] sections
+	LogLevel         string                       `toml:"log_level"`           // log level: debug, info, warn, error (default "info")
+	LowPower         bool                         `toml:"low_power"`           // reduce CPU by lowering UI cadence and disabling visualization
 }
 
 // defaultConfig returns a Config with sensible defaults.
@@ -460,353 +427,241 @@ func Load() (Config, error) {
 	if err != nil {
 		return cfg, nil
 	}
-
-	f, err := os.Open(path)
+	data, err := os.ReadFile(path)
 	if err != nil {
 		if errors.Is(err, fs.ErrNotExist) {
 			return cfg, nil
 		}
 		return cfg, err
 	}
-	defer f.Close()
 
-	scanner := bufio.NewScanner(f)
-	section := "" // current [section] header, empty = top-level
-	for scanner.Scan() {
-		line := strings.TrimSpace(scanner.Text())
-		if line == "" || strings.HasPrefix(line, "#") {
-			continue
+	// Keep the historical aliases while letting the TOML decoder validate and
+	// decode the complete document (including multiline arrays and comments).
+	normalized := bytes.Clone(data)
+	// Canonicalize all historical YouTube section aliases into one table. The
+	// blocks are merged in source order, so the historical last-value-wins rule
+	// is explicit and no duplicate TOML tables are emitted.
+	normalized = normalizeYouTubeAliases(normalized)
+	normalized, err = tomlutil.RemoveRepeatedKeys(normalized)
+	if err != nil {
+		return cfg, err
+	}
+	if err := toml.Unmarshal(normalized, &cfg); err != nil {
+		return cfg, err
+	}
+
+	// A provider section means enabled, independently of whether it contains
+	// any keys. This is intentionally separate from the decoded field values.
+	var sections map[string]interface{}
+	if err := toml.Unmarshal(normalized, &sections); err != nil {
+		return cfg, err
+	}
+	if _, ok := sections["spotify"]; ok {
+		cfg.Spotify.Enabled = true
+	}
+	if _, ok := sections["qobuz"]; ok {
+		cfg.Qobuz.Enabled = true
+	}
+	if _, ok := sections["tidal"]; ok {
+		cfg.Tidal.Enabled = true
+	}
+	if _, ok := sections["ytmusic"]; ok {
+		cfg.YouTubeMusic.Enabled = true
+	}
+	for name, target := range map[string]*bool{"spotify": &cfg.Spotify.Disabled, "qobuz": &cfg.Qobuz.Disabled, "tidal": &cfg.Tidal.Disabled, "ytmusic": &cfg.YouTubeMusic.Disabled} {
+		if values, ok := sections[name].(map[string]interface{}); ok {
+			if enabled, ok := values["enabled"].(bool); ok {
+				*target = !enabled
+			}
 		}
-
-		// Section header: [navidrome], [plex], [plugins.lastfm], etc.
-		if strings.HasPrefix(line, "[") && strings.HasSuffix(line, "]") {
-			section = strings.ToLower(line[1 : len(line)-1])
-			// Mark providers as enabled when their section exists.
-			// [yt], [youtube], and [ytmusic] all configure the same YouTube providers.
-			switch section {
-			case "yt", "youtube", "ytmusic":
-				cfg.YouTubeMusic.Enabled = true
-				section = "ytmusic" // normalize for key parsing below
-			case "spotify":
-				cfg.Spotify.Enabled = true
-			case "qobuz":
-				cfg.Qobuz.Enabled = true
-			case "tidal":
-				cfg.Tidal.Enabled = true
-			}
-			// Initialize plugin sub-maps for [plugins] and [plugins.*] sections.
-			if section == "plugins" || strings.HasPrefix(section, "plugins.") {
-				if cfg.Plugins == nil {
-					cfg.Plugins = make(map[string]map[string]string)
-				}
-				pluginName := strings.TrimPrefix(section, "plugins.")
-				if pluginName == "plugins" {
-					pluginName = "" // top-level [plugins] section
-				}
-				if _, ok := cfg.Plugins[pluginName]; !ok {
-					cfg.Plugins[pluginName] = make(map[string]string)
-				}
-			}
-			continue
+	}
+	if values, ok := sections["navidrome"].(map[string]interface{}); ok {
+		if scrobble, ok := values["scrobble"].(bool); ok {
+			cfg.Navidrome.ScrobbleDisabled = !scrobble
 		}
-
-		key, val, ok := strings.Cut(line, "=")
-		if !ok {
-			continue
+	}
+	if values, ok := sections["mixcloud"].(map[string]interface{}); ok {
+		_, exists := values["styles"]
+		cfg.Mixcloud.StylesSet = exists
+	}
+	if values, ok := sections["radio"].(map[string]interface{}); ok {
+		if country, ok := values["country"].(string); ok {
+			cfg.Radio.Country = strings.TrimSpace(country)
 		}
-		key = strings.TrimSpace(key)
-		val = stripInlineComment(val)
+	}
+	if values, ok := sections["podcast"].(map[string]interface{}); ok {
+		if country, ok := values["country"].(string); ok {
+			cfg.Podcast.Country = strings.TrimSpace(country)
+		}
+	}
+	if strings.TrimSpace(cfg.YouTubeMusic.CookiesFrom) == "" {
+		cfg.YouTubeMusic.CookiesFrom = ""
+	}
 
-		switch section {
-		case "navidrome":
-			switch key {
-			case "url":
-				cfg.Navidrome.URL = parseString(val)
-			case "user":
-				cfg.Navidrome.User = parseString(val)
-			case "password":
-				cfg.Navidrome.Password = parseString(val)
-			case "browse_sort":
-				cfg.Navidrome.BrowseSort = parseString(val)
-			case "format":
-				cfg.Navidrome.Format = parseString(val)
-			case "scrobble":
-				// Opt-out: only mark disabled when the value is explicitly "false".
-				cfg.Navidrome.ScrobbleDisabled = strings.ToLower(val) == "false"
+	cfg.Plugins = nil
+	if plugins, ok := sections["plugins"].(map[string]interface{}); ok {
+		cfg.Plugins = map[string]map[string]string{"": {}}
+		for key, value := range plugins {
+			if text, ok := pluginValueString(value); ok {
+				cfg.Plugins[""][key] = interpolateString(text)
 			}
-		case "lyrion":
-			switch key {
-			case "url":
-				cfg.Lyrion.URL = parseString(val)
-			case "user":
-				cfg.Lyrion.User = parseString(val)
-			case "password":
-				cfg.Lyrion.Password = parseString(val)
-			case "show_unplayable":
-				cfg.Lyrion.ShowUnplayable = strings.ToLower(val) == "true"
-			}
-		case "spotify":
-			switch key {
-			case "enabled":
-				cfg.Spotify.Disabled = strings.ToLower(val) == "false"
-			case "client_id":
-				cfg.Spotify.ClientID = parseString(val)
-			case "bitrate":
-				if v, err := strconv.Atoi(val); err == nil {
-					cfg.Spotify.Bitrate = v
-				}
-			}
-		case "qobuz":
-			switch key {
-			case "enabled":
-				cfg.Qobuz.Disabled = strings.ToLower(val) == "false"
-			case "quality":
-				if v, err := strconv.Atoi(val); err == nil {
-					cfg.Qobuz.Quality = v
-				}
-			}
-		case "tidal":
-			switch key {
-			case "enabled":
-				cfg.Tidal.Disabled = strings.ToLower(val) == "false"
-			case "client_id":
-				cfg.Tidal.ClientID = parseString(val)
-			case "client_secret":
-				cfg.Tidal.ClientSecret = parseString(val)
-			case "quality":
-				cfg.Tidal.Quality = parseString(val)
-			}
-		case "ytmusic":
-			switch key {
-			case "enabled":
-				cfg.YouTubeMusic.Disabled = strings.ToLower(val) == "false"
-			case "client_id":
-				cfg.YouTubeMusic.ClientID = parseString(val)
-			case "client_secret":
-				cfg.YouTubeMusic.ClientSecret = parseString(val)
-			case "cookies_from":
-				cfg.YouTubeMusic.CookiesFrom = strings.TrimSpace(parseString(val))
-			case "expand_playlist":
-				v := strings.ToLower(val) != "false"
-				cfg.YouTubeMusic.ExpandPlaylist = &v
-			}
-		case "plex":
-			switch key {
-			case "url":
-				cfg.Plex.URL = parseString(val)
-			case "token":
-				cfg.Plex.Token = parseString(val)
-			case "libraries":
-				cfg.Plex.Libraries = parseStringSlice(val)
-			}
-		case "radio":
-			switch key {
-			case "country":
-				cfg.Radio.Country = strings.TrimSpace(parseString(val))
-			}
-		case "podcast":
-			if key == "country" {
-				cfg.Podcast.Country = strings.TrimSpace(parseString(val))
-			}
-		case "soundcloud":
-			switch key {
-			case "enabled":
-				cfg.SoundCloud.Enabled = strings.ToLower(val) == "true"
-			case "user":
-				cfg.SoundCloud.User = parseString(val)
-			case "cookies_from":
-				cfg.SoundCloud.CookiesFrom = strings.TrimSpace(parseString(val))
-			}
-		case "mixcloud":
-			switch key {
-			case "enabled":
-				cfg.Mixcloud.Enabled = strings.ToLower(val) == "true"
-			case "username":
-				cfg.Mixcloud.Username = strings.TrimSpace(parseString(val))
-			case "access_token":
-				cfg.Mixcloud.AccessToken = strings.TrimSpace(parseString(val))
-			case "cookies_from":
-				cfg.Mixcloud.CookiesFrom = strings.TrimSpace(parseString(val))
-			case "styles":
-				cfg.Mixcloud.Styles = parseStringSlice(val)
-				cfg.Mixcloud.StylesSet = true
-			case "max_items":
-				if v, err := strconv.Atoi(val); err == nil {
-					cfg.Mixcloud.MaxItems = v
-				}
-			case "stream_creators":
-				if v, err := strconv.Atoi(val); err == nil {
-					cfg.Mixcloud.StreamCreators = v
-				}
-			}
-		case "netease":
-			switch key {
-			case "enabled":
-				cfg.NetEase.Enabled = strings.ToLower(val) == "true"
-			case "cookies_from":
-				cfg.NetEase.CookiesFrom = strings.TrimSpace(parseString(val))
-			case "user_id":
-				cfg.NetEase.UserID = parseString(val)
-			}
-		case "yandex":
-			switch key {
-			case "enabled":
-				cfg.Yandex.Enabled = strings.ToLower(val) == "true"
-			case "token":
-				cfg.Yandex.Token = parseString(val)
-			}
-		case "jellyfin":
-			switch key {
-			case "url":
-				cfg.Jellyfin.URL = parseString(val)
-			case "token":
-				cfg.Jellyfin.Token = parseString(val)
-			case "user":
-				cfg.Jellyfin.User = parseString(val)
-			case "password":
-				cfg.Jellyfin.Password = parseString(val)
-			case "user_id":
-				cfg.Jellyfin.UserID = parseString(val)
-			}
-		case "emby":
-			switch key {
-			case "url":
-				cfg.Emby.URL = parseString(val)
-			case "token":
-				cfg.Emby.Token = parseString(val)
-			case "user":
-				cfg.Emby.User = parseString(val)
-			case "password":
-				cfg.Emby.Password = parseString(val)
-			case "user_id":
-				cfg.Emby.UserID = parseString(val)
-			}
-		case "audiobookshelf":
-			switch key {
-			case "url":
-				cfg.Audiobookshelf.URL = parseString(val)
-			case "token":
-				cfg.Audiobookshelf.Token = parseString(val)
-			case "user":
-				cfg.Audiobookshelf.User = parseString(val)
-			case "password":
-				cfg.Audiobookshelf.Password = parseString(val)
-			case "libraries":
-				cfg.Audiobookshelf.Libraries = parseStringSlice(val)
-			}
-		default:
-			// Handle [plugins] and [plugins.*] sections.
-			if section == "plugins" || strings.HasPrefix(section, "plugins.") {
-				pluginName := strings.TrimPrefix(section, "plugins.")
-				if pluginName == "plugins" {
-					pluginName = "" // top-level [plugins] section
-				}
-				if cfg.Plugins != nil {
-					if m, ok := cfg.Plugins[pluginName]; ok {
-						m[key] = parseString(val)
-					}
-				}
+		}
+		for plugin, rawValues := range plugins {
+			values, ok := rawValues.(map[string]interface{})
+			if !ok {
 				continue
 			}
-			switch key {
-			case "volume":
-				if v, err := strconv.ParseFloat(val, 64); err == nil {
-					cfg.Volume = v
+			if cfg.Plugins == nil {
+				cfg.Plugins = make(map[string]map[string]string)
+			}
+			cfg.Plugins[plugin] = make(map[string]string, len(values))
+			for key, value := range values {
+				if text, ok := pluginValueString(value); ok {
+					cfg.Plugins[plugin][key] = interpolateString(text)
 				}
-			case "volume_min":
-				if v, err := strconv.ParseFloat(val, 64); err == nil {
-					cfg.VolumeMin = v
-				}
-			case "vis_volume_linked":
-				if v, err := strconv.ParseBool(val); err == nil {
-					cfg.VisVolumeLinked = v
-				}
-			case "repeat":
-				val = parseString(val)
-				switch strings.ToLower(val) {
-				case "all", "one", "off":
-					cfg.Repeat = strings.ToLower(val)
-				}
-			case "shuffle":
-				cfg.Shuffle = val == "true"
-			case "mono":
-				cfg.Mono = val == "true"
-			case "auto_play":
-				cfg.AutoPlay = val == "true"
-			case "seek_large_step_sec":
-				if v, err := strconv.Atoi(val); err == nil {
-					cfg.SeekStepLarge = v
-				}
-			case "eq":
-				cfg.EQ = parseEQ(val)
-			case "eq_preset":
-				cfg.EQPreset = parseString(val)
-			case "theme":
-				cfg.Theme = parseString(val)
-			case "provider":
-				cfg.Provider = strings.ToLower(parseString(val))
-			case "visualizer":
-				cfg.Visualizer = parseString(val)
-			case "vis_rows":
-				if v, err := strconv.Atoi(val); err == nil {
-					cfg.VisRows = v
-				}
-			case "sample_rate":
-				if v, err := strconv.Atoi(val); err == nil {
-					cfg.SampleRate = v
-				}
-			case "buffer_ms":
-				if v, err := strconv.Atoi(val); err == nil {
-					cfg.BufferMs = v
-				}
-			case "resample_quality":
-				if v, err := strconv.Atoi(val); err == nil {
-					cfg.ResampleQuality = v
-				}
-			case "bit_depth":
-				if v, err := strconv.Atoi(val); err == nil {
-					cfg.BitDepth = v
-				}
-			case "speed":
-				if v, err := strconv.ParseFloat(val, 64); err == nil {
-					cfg.Speed = v
-				}
-			case "simplified":
-				cfg.Simplified = val == "true"
-			case "hide_help_bar":
-				cfg.HideHelpBar = val == "true"
-			case "hide_settings_pane":
-				cfg.HideSettingsPane = val == "true"
-			case "show_metadata":
-				cfg.ShowMetadata = val == "true"
-			case "expanded":
-				cfg.Expanded = strings.ToLower(val) == "true"
-			case "audio_device":
-				cfg.AudioDevice = parseString(val)
-			case "initial_directory":
-				cfg.InitialDirectory = parseString(val)
-			case "padding_horizontal":
-				if v, err := strconv.Atoi(val); err == nil {
-					cfg.PaddingH = v
-				}
-			case "padding_vertical":
-				if v, err := strconv.Atoi(val); err == nil {
-					cfg.PaddingV = v
-				}
-			case "log_level":
-				lvl := strings.ToLower(parseString(val))
-				switch lvl {
-				case "debug", "info", "warn", "warning", "error":
-					cfg.LogLevel = lvl
-				}
-			case "low_power":
-				cfg.LowPower = strings.ToLower(val) == "true"
 			}
 		}
 	}
 
+	interpolateConfigStrings(&cfg)
 	cfg.clamp()
-	return cfg, scanner.Err()
+	return cfg, nil
+}
+
+func pluginValueString(value interface{}) (string, bool) {
+	switch value := value.(type) {
+	case string:
+		return value, true
+	case bool, int64, uint64, float64:
+		return fmt.Sprint(value), true
+	default:
+		return "", false
+	}
+}
+
+func normalizeYouTubeAliases(data []byte) []byte {
+	lines := strings.Split(string(data), "\n")
+	var out, youtubeBody []string
+	inAlias := false
+	seenAlias := false
+	for _, line := range lines {
+		trimmed := strings.ToLower(strings.TrimSpace(stripTOMLComment(line)))
+		alias := trimmed == "[yt]" || trimmed == "[youtube]" || trimmed == "[ytmusic]"
+		if alias {
+			inAlias = true
+			seenAlias = true
+			continue
+		}
+		if strings.HasPrefix(trimmed, "[") && strings.HasSuffix(trimmed, "]") {
+			inAlias = false
+		}
+		if inAlias {
+			youtubeBody = append(youtubeBody, string(normalizeBooleanLiteral([]byte(line))))
+		} else {
+			out = append(out, string(normalizeBooleanLiteral([]byte(line))))
+		}
+	}
+	if !seenAlias {
+		return []byte(strings.Join(out, "\n"))
+	}
+	for len(out) > 0 && strings.TrimSpace(out[len(out)-1]) == "" {
+		out = out[:len(out)-1]
+	}
+	if len(out) > 0 {
+		out = append(out, "")
+	}
+	out = append(out, "[ytmusic]")
+	out = append(out, youtubeBody...)
+	return []byte(strings.Join(out, "\n"))
+}
+
+// stripTOMLComment removes a comment only when # is outside a basic or literal
+// string. It is used for recognizing headers, not as a global TOML rewrite.
+func stripTOMLComment(line string) string {
+	var quote byte
+	escaped := false
+	for i := 0; i < len(line); i++ {
+		c := line[i]
+		if quote == '"' && escaped {
+			escaped = false
+			continue
+		}
+		if quote == '"' && c == '\\' {
+			escaped = true
+			continue
+		}
+		if quote != 0 {
+			if c == quote {
+				quote = 0
+			}
+			continue
+		}
+		if c == '"' || c == '\'' {
+			quote = c
+		} else if c == '#' {
+			return line[:i]
+		}
+	}
+	return line
+}
+
+func normalizeBooleanLiteral(line []byte) []byte {
+	text := string(line)
+	key, value, ok := strings.Cut(text, "=")
+	if !ok {
+		return line
+	}
+	trimmed := strings.TrimSpace(value)
+	comment := ""
+	if i := strings.Index(trimmed, "#"); i >= 0 {
+		comment, trimmed = trimmed[i:], strings.TrimSpace(trimmed[:i])
+	}
+	if trimmed == "TRUE" || trimmed == "True" || trimmed == "FALSE" || trimmed == "False" {
+		return []byte(key + " = " + strings.ToLower(trimmed) + " " + comment)
+	}
+	return line
+}
+
+func interpolateString(s string) string {
+	if len(s) < 2 || s[0] != '$' {
+		return s
+	}
+	name := s[1:]
+	if name[0] == '{' {
+		if len(name) < 2 || name[len(name)-1] != '}' {
+			return s
+		}
+		name = name[1 : len(name)-1]
+	}
+	if !isEnvName(name) {
+		return s
+	}
+	return os.Getenv(name)
+}
+
+func interpolateConfigStrings(cfg *Config) {
+	v := reflect.ValueOf(cfg).Elem()
+	var walk func(reflect.Value)
+	walk = func(v reflect.Value) {
+		if v.Kind() == reflect.Pointer {
+			if !v.IsNil() {
+				walk(v.Elem())
+			}
+			return
+		}
+		if v.Kind() == reflect.Struct {
+			for i := 0; i < v.NumField(); i++ {
+				if v.Field(i).CanSet() {
+					walk(v.Field(i))
+				}
+			}
+			return
+		}
+		if v.Kind() == reflect.String {
+			v.SetString(interpolateString(v.String()))
+		}
+	}
+	walk(v)
 }
 
 // Save updates only the given key in the existing config file, preserving

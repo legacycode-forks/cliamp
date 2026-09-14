@@ -2,7 +2,6 @@
 package theme
 
 import (
-	"bufio"
 	"cmp"
 	"embed"
 	"fmt"
@@ -14,6 +13,7 @@ import (
 	"strings"
 
 	"github.com/bjarneo/cliamp/internal/appdir"
+	"github.com/pelletier/go-toml/v2"
 )
 
 //go:embed themes/*.toml
@@ -77,42 +77,31 @@ func Default() Theme {
 	return Theme{Name: DefaultName}
 }
 
-// Parse reads flat TOML key=value lines from r and returns a Theme.
-// Uses the same manual parsing approach as config/config.go.
+// Parse reads a TOML theme from r and returns a Theme.
+// Unknown keys are ignored so theme files can carry metadata for other clients.
 func Parse(name string, r io.Reader) (Theme, error) {
-	t := Theme{Name: name}
-	scanner := bufio.NewScanner(r)
-	for scanner.Scan() {
-		line := strings.TrimSpace(scanner.Text())
-		if line == "" || strings.HasPrefix(line, "#") {
-			continue
-		}
-		key, val, ok := strings.Cut(line, "=")
-		if !ok {
-			continue
-		}
-		key = strings.TrimSpace(key)
-		val = strings.TrimSpace(val)
-		val = strings.Trim(val, `"'`)
-
-		switch key {
-		case "bg":
-			t.BG = val
-		case "accent":
-			t.Accent = val
-		case "bright_fg":
-			t.BrightFG = val
-		case "fg":
-			t.FG = val
-		case "red":
-			t.Red = val
-		case "yellow":
-			t.Yellow = val
-		case "green":
-			t.Green = val
-		}
+	var values struct {
+		BG       string `toml:"bg"`
+		Accent   string `toml:"accent"`
+		BrightFG string `toml:"bright_fg"`
+		FG       string `toml:"fg"`
+		Green    string `toml:"green"`
+		Yellow   string `toml:"yellow"`
+		Red      string `toml:"red"`
 	}
-	return t, scanner.Err()
+	if err := toml.NewDecoder(r).Decode(&values); err != nil {
+		return Theme{}, fmt.Errorf("parse theme %q: %w", name, err)
+	}
+	return Theme{
+		Name:     name,
+		BG:       values.BG,
+		Accent:   values.Accent,
+		BrightFG: values.BrightFG,
+		FG:       values.FG,
+		Green:    values.Green,
+		Yellow:   values.Yellow,
+		Red:      values.Red,
+	}, nil
 }
 
 // LoadAll loads built-in themes and user custom themes from

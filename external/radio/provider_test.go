@@ -402,6 +402,24 @@ url = "http://c/"
 	}
 }
 
+func TestLoadStationsPreservesQuotedHashesAndReturnsSyntaxErrors(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "radios.toml")
+	writeFile(t, path, "[[station]]\nname = \"A #1\" # display name\nurl = \"http://a/stream#part\"\n")
+	stations, err := loadStations(path)
+	if err != nil {
+		t.Fatalf("loadStations: %v", err)
+	}
+	if len(stations) != 1 || stations[0].name != "A #1" || stations[0].url != "http://a/stream#part" {
+		t.Fatalf("stations = %+v", stations)
+	}
+
+	writeFile(t, path, "[[station]\nname = \"broken\"\n")
+	if _, err := loadStations(path); err == nil {
+		t.Fatal("loadStations accepted malformed TOML")
+	}
+}
+
 func TestFavoriteIDsRemainStableAfterRemovalAndReload(t *testing.T) {
 	p := newTestProvider(t)
 	stations := []CatalogStation{

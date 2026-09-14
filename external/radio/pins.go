@@ -136,17 +136,27 @@ func loadPlaces(path string) ([]Place, error) {
 		return nil, err
 	}
 
-	var places []Place
-	tomlutil.ParseSections(data, "country", func(f map[string]string) {
-		code := normalizeCountryCode(f["code"])
+	var raw struct {
+		Countries []struct {
+			Code  string `toml:"code"`
+			Name  string `toml:"name"`
+			State string `toml:"state"`
+		} `toml:"country"`
+	}
+	if err := tomlutil.Decode(data, &raw); err != nil {
+		return nil, fmt.Errorf("decode radio countries TOML: %w", err)
+	}
+	places := make([]Place, 0, len(raw.Countries))
+	for _, item := range raw.Countries {
+		code := normalizeCountryCode(item.Code)
 		if code == "" {
-			return
+			continue
 		}
-		place := Place{Code: code, Name: f["name"], State: strings.TrimSpace(f["state"])}
+		place := Place{Code: code, Name: item.Name, State: strings.TrimSpace(item.State)}
 		if place.Name == "" {
 			place.Name = code
 		}
 		places = append(places, place)
-	})
+	}
 	return places, nil
 }

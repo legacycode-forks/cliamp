@@ -129,6 +129,41 @@ func TestParsedThemeNotDefault(t *testing.T) {
 	}
 }
 
+func TestParseAcceptsInlineComments(t *testing.T) {
+	input := `accent = "#ff0000" # selection color
+fg = "#00ff00" # foreground
+`
+	th, err := Parse("test", strings.NewReader(input))
+	if err != nil {
+		t.Fatalf("Parse error: %v", err)
+	}
+	if th.Accent != "#ff0000" || th.FG != "#00ff00" {
+		t.Errorf("parsed colors = (%q, %q), want (#ff0000, #00ff00)", th.Accent, th.FG)
+	}
+}
+
+func TestParsePreservesHashesInQuotedValues(t *testing.T) {
+	th, err := Parse("test", strings.NewReader(`accent = "#123456"`))
+	if err != nil {
+		t.Fatalf("Parse error: %v", err)
+	}
+	if th.Accent != "#123456" {
+		t.Errorf("Accent = %q, want #123456", th.Accent)
+	}
+}
+
+func TestParseRejectsWrongTypes(t *testing.T) {
+	if _, err := Parse("test", strings.NewReader(`accent = 123`)); err == nil {
+		t.Fatal("Parse accepted integer for accent")
+	}
+}
+
+func TestParseRejectsSyntaxErrors(t *testing.T) {
+	if _, err := Parse("test", strings.NewReader(`accent = "#123456`)); err == nil {
+		t.Fatal("Parse accepted unterminated string")
+	}
+}
+
 func TestThemeValidate(t *testing.T) {
 	valid := Theme{
 		Name:     "valid",

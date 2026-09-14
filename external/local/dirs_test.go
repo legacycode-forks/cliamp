@@ -72,6 +72,16 @@ recursive = false
 	}
 }
 
+func TestParsePlaylistDocRepeatedKeyLastValueWins(t *testing.T) {
+	doc, err := parsePlaylistDocE([]byte("[[track]]\npath = \"/first.mp3\"\npath = \"/last.mp3\"\n"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(doc.tracks) != 1 || doc.tracks[0].Path != "/last.mp3" {
+		t.Fatalf("tracks = %#v", doc.tracks)
+	}
+}
+
 func TestParsePlaylistDocSkipsEmptyDirPath(t *testing.T) {
 	doc := parsePlaylistDoc([]byte("[[dir]]\n[[track]]\npath = \"/a.mp3\"\n"))
 	if len(doc.dirs) != 0 {

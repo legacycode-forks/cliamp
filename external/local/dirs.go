@@ -43,25 +43,83 @@ type playlistDoc struct {
 
 // parsePlaylistDoc parses a playlist TOML document. Directory sources are
 // parsed but not scanned; call expand to resolve them into tracks.
+type playlistTOML struct {
+	Tracks []trackTOML `toml:"track"`
+	Dirs   []dirTOML   `toml:"dir"`
+}
+
+type trackTOML struct {
+	Path           string         `toml:"path"`
+	Title          string         `toml:"title"`
+	Artist         string         `toml:"artist"`
+	Album          string         `toml:"album"`
+	Genre          string         `toml:"genre"`
+	Year           int            `toml:"year"`
+	TrackNumber    int            `toml:"track_number"`
+	DurationSecs   int            `toml:"duration_secs"`
+	Bookmark       bool           `toml:"bookmark"`
+	Favorite       bool           `toml:"favorite"`
+	Feed           bool           `toml:"feed"`
+	Realtime       bool           `toml:"realtime"`
+	EmbeddedLyrics string         `toml:"embedded_lyrics"`
+	AlbumArtURL    string         `toml:"album_art_url"`
+	ProviderMeta   map[string]any `toml:"provider_meta"`
+}
+
+type dirTOML struct {
+	Path      string `toml:"path"`
+	Recursive *bool  `toml:"recursive"`
+}
+
+func (t trackTOML) track() playlist.Track {
+	bookmark := t.Bookmark
+	if !bookmark {
+		bookmark = t.Favorite
+	}
+	return playlist.Track{Path: t.Path, Title: t.Title, Artist: t.Artist, Album: t.Album, Genre: t.Genre, Year: t.Year, TrackNumber: t.TrackNumber, DurationSecs: t.DurationSecs, Bookmark: bookmark, Feed: t.Feed, Realtime: t.Realtime, EmbeddedLyrics: t.EmbeddedLyrics, AlbumArtURL: t.AlbumArtURL, Stream: playlist.IsURL(t.Path), ProviderMeta: tomlutil.FlattenStringMap(t.ProviderMeta)}
+}
+
 func parsePlaylistDoc(data []byte) *playlistDoc {
-	doc := &playlistDoc{}
-	tomlutil.ParseNamedSections(data, []string{"track", "dir"}, func(section string, f map[string]string) {
-		switch section {
-		case "track":
-			doc.tracks = append(doc.tracks, parseTrackFields(f))
-			doc.order = append(doc.order, itemTrack)
-		case "dir":
-			if f["path"] == "" {
-				return
-			}
-			doc.dirs = append(doc.dirs, playlist.DirSource{
-				Path:      f["path"],
-				Recursive: f["recursive"] != "false",
-			})
-			doc.order = append(doc.order, itemDir)
-		}
-	})
+	doc, _ := parsePlaylistDocE(data)
 	return doc
+}
+
+func parsePlaylistDocE(data []byte) (*playlistDoc, error) {
+	normalized, err := tomlutil.RemoveRepeatedKeys(data)
+	if err != nil {
+		return nil, err
+	}
+	var raw playlistTOML
+	if err := tomlutil.Decode(normalized, &raw); err != nil {
+		return nil, err
+	}
+	names, err := tomlutil.ArrayTableNames(data)
+	if err != nil {
+		return nil, err
+	}
+	doc := &playlistDoc{}
+	ti, di := 0, 0
+	for _, name := range names {
+		switch name {
+		case "track":
+			if ti < len(raw.Tracks) {
+				doc.tracks = append(doc.tracks, raw.Tracks[ti].track())
+				doc.order = append(doc.order, itemTrack)
+				ti++
+			}
+		case "dir":
+			if di < len(raw.Dirs) && raw.Dirs[di].Path != "" {
+				recursive := true
+				if raw.Dirs[di].Recursive != nil {
+					recursive = *raw.Dirs[di].Recursive
+				}
+				doc.dirs = append(doc.dirs, playlist.DirSource{Path: raw.Dirs[di].Path, Recursive: recursive})
+				doc.order = append(doc.order, itemDir)
+			}
+			di++
+		}
+	}
+	return doc, nil
 }
 
 // expand returns the full track list: explicit [[track]] entries plus tracks

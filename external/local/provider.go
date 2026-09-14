@@ -11,7 +11,6 @@ import (
 	"os"
 	"path/filepath"
 	"sort"
-	"strconv"
 	"strings"
 
 	"github.com/bjarneo/cliamp/favorites"
@@ -679,7 +678,7 @@ func (p *Provider) existingDoc(path string) (*playlistDoc, error) {
 	if err != nil {
 		return nil, fmt.Errorf("read playlist %q: %w", path, err)
 	}
-	return parsePlaylistDoc(data), nil
+	return parsePlaylistDocE(data)
 }
 
 // errReservedHistoryName is returned when a caller tries to write to or
@@ -1061,38 +1060,6 @@ func writeTrack(w io.Writer, t playlist.Track) {
 	}
 }
 
-// parseTrackFields converts a parsed [[track]] section into a Track.
-func parseTrackFields(f map[string]string) playlist.Track {
-	t := playlist.Track{
-		Path:     f["path"],
-		Title:    f["title"],
-		Artist:   f["artist"],
-		Album:    f["album"],
-		Genre:    f["genre"],
-		Feed:     f["feed"] == "true",
-		Realtime: f["realtime"] == "true",
-	}
-	t.EmbeddedLyrics = f["embedded_lyrics"]
-	t.AlbumArtURL = f["album_art_url"]
-	t.Stream = playlist.IsURL(t.Path)
-	// "favorite" is the pre-rename alias for "bookmark"; prefer bookmark.
-	bookmark, ok := f["bookmark"]
-	if !ok {
-		bookmark = f["favorite"]
-	}
-	t.Bookmark = bookmark == "true"
-	if n, err := strconv.Atoi(f["year"]); err == nil {
-		t.Year = n
-	}
-	if n, err := strconv.Atoi(f["track_number"]); err == nil {
-		t.TrackNumber = n
-	}
-	if n, err := strconv.Atoi(f["duration_secs"]); err == nil {
-		t.DurationSecs = n
-	}
-	return t
-}
-
 // loadDoc reads and parses a playlist file into explicit tracks and
 // directory sources, without scanning any directories.
 func (p *Provider) loadDoc(path string) (*playlistDoc, error) {
@@ -1100,5 +1067,5 @@ func (p *Provider) loadDoc(path string) (*playlistDoc, error) {
 	if err != nil {
 		return nil, err
 	}
-	return parsePlaylistDoc(data), nil
+	return parsePlaylistDocE(data)
 }

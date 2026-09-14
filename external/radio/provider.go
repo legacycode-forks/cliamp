@@ -602,12 +602,20 @@ func loadStations(path string) ([]station, error) {
 		return nil, err
 	}
 
-	var stations []station
-	tomlutil.ParseSections(data, "station", func(f map[string]string) {
-		s := station{name: f["name"], url: f["url"]}
-		if s.name != "" && s.url != "" {
-			stations = append(stations, s)
+	var raw struct {
+		Stations []struct {
+			Name string `toml:"name"`
+			URL  string `toml:"url"`
+		} `toml:"station"`
+	}
+	if err := tomlutil.Decode(data, &raw); err != nil {
+		return nil, fmt.Errorf("decode radios TOML: %w", err)
+	}
+	stations := make([]station, 0, len(raw.Stations))
+	for _, item := range raw.Stations {
+		if item.Name != "" && item.URL != "" {
+			stations = append(stations, station{name: item.Name, url: item.URL})
 		}
-	})
+	}
 	return stations, nil
 }
