@@ -6,6 +6,7 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"testing"
 
@@ -678,7 +679,7 @@ func TestWriteDirRoundTrip(t *testing.T) {
 
 // quote returns a double-quoted Go string literal for use in TOML fixtures.
 func quote(s string) string {
-	return `"` + strings.ReplaceAll(s, `"`, `\"`) + `"`
+	return strconv.Quote(s)
 }
 
 // writeInterleavedDoc writes a hand-authored mix.toml with the order

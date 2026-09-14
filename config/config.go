@@ -950,23 +950,6 @@ func abs(x int) int {
 	return x
 }
 
-// parseStringSlice parses a comma-separated list of strings, optionally
-// wrapped in square brackets (e.g. `["Music", "Jazz"]` or `Music, Jazz`).
-// Leading/trailing whitespace and surrounding quotes are stripped from each element.
-func parseStringSlice(val string) []string {
-	val = strings.Trim(val, "[]")
-	parts := strings.Split(val, ",")
-	result := make([]string, 0, len(parts))
-	for _, p := range parts {
-		p = strings.TrimSpace(p)
-		p = strings.Trim(p, `"'`)
-		if p != "" {
-			result = append(result, p)
-		}
-	}
-	return result
-}
-
 // parseEQ parses a TOML-style array like [0, 1.5, -2, ...] into 10 bands.
 func parseEQ(val string) [10]float64 {
 	var bands [10]float64
