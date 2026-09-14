@@ -96,6 +96,34 @@ client_secret = "${CLIAMP_TEST_YT_SECRET}"
 	}
 }
 
+func TestLoadPreservesPlexValuesBeforeInlineComments(t *testing.T) {
+	t.Setenv("HOME", t.TempDir())
+
+	path := filepath.Join(os.Getenv("HOME"), ".config", "cliamp", "config.toml")
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+		t.Fatalf("MkdirAll: %v", err)
+	}
+	data := []byte(`
+[plex]
+url = "http://plex.local:32400" # server URL
+token = "secret#token" # access token
+`)
+	if err := os.WriteFile(path, data, 0o644); err != nil {
+		t.Fatalf("WriteFile: %v", err)
+	}
+
+	cfg, err := Load()
+	if err != nil {
+		t.Fatalf("Load() error = %v", err)
+	}
+	if cfg.Plex.URL != "http://plex.local:32400" {
+		t.Errorf("Plex.URL = %q, want %q", cfg.Plex.URL, "http://plex.local:32400")
+	}
+	if cfg.Plex.Token != "secret#token" {
+		t.Errorf("Plex.Token = %q, want %q", cfg.Plex.Token, "secret#token")
+	}
+}
+
 func TestLoadPreservesLiteralDollarInPassword(t *testing.T) {
 	t.Setenv("HOME", t.TempDir())
 

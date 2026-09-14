@@ -29,6 +29,42 @@ func configPath() (string, error) {
 	return filepath.Join(dir, "config.toml"), nil
 }
 
+// stripInlineComment removes a TOML comment that starts outside a quoted value.
+func stripInlineComment(s string) string {
+	var quote byte
+	escaped := false
+	for i := 0; i < len(s); i++ {
+		c := s[i]
+		if quote == '"' {
+			if escaped {
+				escaped = false
+				continue
+			}
+			if c == '\\' {
+				escaped = true
+				continue
+			}
+			if c == quote {
+				quote = 0
+			}
+			continue
+		}
+		if quote == '\'' {
+			if c == quote {
+				quote = 0
+			}
+			continue
+		}
+		switch c {
+		case '"', '\'':
+			quote = c
+		case '#':
+			return strings.TrimSpace(s[:i])
+		}
+	}
+	return strings.TrimSpace(s)
+}
+
 // parseString trims surrounding quotes from a TOML string value and, if the
 // result is exactly $NAME or ${NAME}, replaces it with the value of that
 // environment variable (or "" when unset). Mixed values containing other
@@ -479,7 +515,7 @@ func Load() (Config, error) {
 			continue
 		}
 		key = strings.TrimSpace(key)
-		val = strings.TrimSpace(val)
+		val = stripInlineComment(val)
 
 		switch section {
 		case "navidrome":
