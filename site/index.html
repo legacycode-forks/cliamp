@@ -191,11 +191,12 @@ section{padding:clamp(40px,5vw,72px) 0;border-top:1px solid var(--line-3)}
 .note i{color:var(--fg-2);font-style:normal}
 
 /* ── sources ─────────────────────────────────────────────────────── */
-.filters{display:flex;gap:6px;flex-wrap:wrap;font-family:var(--mono);font-size:12px}
-.filters button{all:unset;cursor:pointer;padding:6px 11px;border-radius:4px;border:1px solid var(--line);font-family:var(--mono);font-size:12px;color:var(--fg-2)}
-.filters button:hover{color:var(--fg);border-color:var(--line-hi)}
-.filters button:focus-visible{outline:2px solid var(--accent)}
-.filters button.on{background:var(--accent);color:var(--bg);border-color:var(--accent)}
+.filters{border:0;margin:0;padding:0;min-inline-size:0}
+.filters-buttons{display:flex;gap:6px;flex-wrap:wrap;font-family:var(--mono);font-size:12px}
+.filters-buttons button{all:unset;cursor:pointer;padding:6px 11px;border-radius:4px;border:1px solid var(--line);font-family:var(--mono);font-size:12px;color:var(--fg-2)}
+.filters-buttons button:hover{color:var(--fg);border-color:var(--line-hi)}
+.filters-buttons button:focus-visible{outline:2px solid var(--accent)}
+.filters-buttons button.on{background:var(--accent);color:var(--bg);border-color:var(--accent)}
 .g-sources{grid-template-columns:repeat(auto-fill,minmax(215px,1fr));gap:10px;margin-top:24px}
 .src{border:1px solid var(--line);border-radius:6px;padding:15px 16px;background:var(--panel);transition:border-color .15s}
 .src:hover{border-color:var(--c)}
@@ -419,7 +420,10 @@ footer a{color:var(--fg-2)}
         <h2>Every source, one interface</h2>
         <p class="sub">Streaming services, self-hosted libraries, local files, podcasts, and radio — all through the same playlist, EQ, visualizer, and lyrics pipeline.</p>
       </div>
-      <div class="filters" id="filters" role="group" aria-label="Filter sources"></div>
+      <fieldset class="filters">
+        <legend class="vh">Filter sources</legend>
+        <div class="filters-buttons" id="filters"></div>
+      </fieldset>
     </div>
     <div class="grid g-sources" id="sources-grid"></div>
     <p class="sub">Setup steps and limits for each source are in the <a href="https://docs.cliamp.stream">docs ↗</a>. Guides: <a href="https://github.com/bjarneo/cliamp/blob/main/docs/radio.md#station-favorites">radio favorites</a>, <a href="https://github.com/bjarneo/cliamp/blob/main/docs/playlists.md#favorites">track favorites</a>, <a href="https://github.com/bjarneo/cliamp/blob/main/docs/configuration.md#download-directory">download directory</a>, <a href="https://github.com/bjarneo/cliamp/blob/main/docs/navidrome.md#transcoding">Navidrome transcoding</a>, <a href="https://github.com/bjarneo/cliamp/blob/main/docs/jellyfin.md">Jellyfin</a>, <a href="https://github.com/bjarneo/cliamp/blob/main/docs/spotify.md">Spotify</a>.</p>
@@ -604,9 +608,9 @@ p:<span class="k">on</span>(<span class="s">"track.change"</span>, <span class="
 </main>
 </div>
 
-<script src="https://cdn.jsdelivr.net/npm/d3-array@3.2.4/dist/d3-array.min.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/d3-geo@3.1.1/dist/d3-geo.min.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/topojson-client@3.1.0/dist/topojson-client.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/d3-array@3.2.4/dist/d3-array.min.js" integrity="sha384-VpKMdU+TlpggHFip46tJ/xkFUs8NFBwLqUMo3+3uiu411lU6eUQYsHVU+JFpA5ja" crossorigin="anonymous"></script>
+<script src="https://cdn.jsdelivr.net/npm/d3-geo@3.1.1/dist/d3-geo.min.js" integrity="sha384-VNiKRUXp0MmglFfqDwkfuk+Y78C3WTJShdKSaFwOacLR3UmamxHIJLBTD3BadIXD" crossorigin="anonymous"></script>
+<script src="https://cdn.jsdelivr.net/npm/topojson-client@3.1.0/dist/topojson-client.min.js" integrity="sha384-Ukv1p/xTma6P4/2bY5KzWBw+ydSpXmhCMtyciIQVDJ1RmOxtCYNMF1uXT9T63H67" crossorigin="anonymous"></script>
 <script>
 (function(){
 "use strict";
@@ -729,16 +733,18 @@ function onOmarchyTheme(){
 
 /* ---------- copy ---------- */
 function legacyCopy(text){
+  var ta;
   try{
-    var ta=document.createElement("textarea");ta.value=text;ta.setAttribute("readonly","");
+    ta=document.createElement("textarea");ta.value=text;ta.setAttribute("readonly","");
     ta.style.position="fixed";ta.style.opacity="0";document.body.appendChild(ta);ta.select();
-    document.execCommand("copy");document.body.removeChild(ta);
-  }catch(e){}
+    return document.execCommand("copy");
+  }catch(e){return false}
+  finally{if(ta)ta.remove()}
 }
 function copyText(text,label){
   var flash=function(){if(!label)return;var prev=label.textContent;label.textContent="copied ✓";setTimeout(function(){label.textContent=prev},1400)};
-  if(navigator.clipboard&&navigator.clipboard.writeText){navigator.clipboard.writeText(text).then(flash,function(){legacyCopy(text);flash()})}
-  else{legacyCopy(text);flash()}
+  if(navigator.clipboard&&navigator.clipboard.writeText){navigator.clipboard.writeText(text).then(flash,function(){if(legacyCopy(text))flash()})}
+  else if(legacyCopy(text))flash()
 }
 function bindCopy(){
   $$("[data-copy]").forEach(function(b){
